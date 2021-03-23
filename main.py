@@ -31,7 +31,6 @@ files_num = 50
 
 def da_rnn(encoder_hidden_size=64, decoder_hidden_size=64, T=10, learning_rate=0.01, batch_size=128):
     train_cfg = TrainConfig(T, int(files_num * 100 * 0.7), batch_size, nn.MSELoss())
-    # train_cfg = TrainConfig(T, int(1000 * 0.7), batch_size, nn.MSELoss())
     logger.info(f"Training size: {int(total / files_num) * train_cfg.train_size:d}.")
 
     enc_kwargs = {"input_size": 5307, "hidden_size": encoder_hidden_size, "T": T}
@@ -62,8 +61,8 @@ def da_rnn(encoder_hidden_size=64, decoder_hidden_size=64, T=10, learning_rate=0
 def train(inputs_list, net: DaRnnNet, t_cfg: TrainConfig, n_epochs=10, save_plots=False):
     f = open(root_path+"test.txt", "w")
     iter_per_epoch = int(np.ceil(int(total / files_num) * t_cfg.train_size * 1. / t_cfg.batch_size))
-    iter_losses = np.zeros(n_epochs * iter_per_epoch)
-    epoch_losses = np.zeros(n_epochs)
+    iter_losses = np.zeros((n_epochs+1) * iter_per_epoch)
+    epoch_losses = np.zeros(n_epochs+1)
     logger.info(
         f"Iterations per epoch: {int(total / files_num) * t_cfg.train_size * 1. / t_cfg.batch_size:3.3f} ~ {iter_per_epoch:d}.")
 
@@ -112,7 +111,7 @@ def train(inputs_list, net: DaRnnNet, t_cfg: TrainConfig, n_epochs=10, save_plot
                                       t_cfg.train_size, t_cfg.batch_size, t_cfg.T,
                                       on_train=False)
                 # TODO: make this MSE and make it work for multiple inputs
-                val_loss = [x - y for x, y in zip(y_val_pred, t_label_data) if x.all() != 0]
+                val_loss = [x - y for x, y in zip(y_val_pred, t_label_data[t_cfg.T-1:]) if x.all() != 0]
                 test_loss = [x - y for x, y in zip(y_test_pred, t_label_data[t_cfg.train_size:]) if x.all() != 0]
                 all_val_loss = all_val_loss + val_loss
                 all_test_loss = all_test_loss + test_loss
@@ -127,6 +126,10 @@ def train(inputs_list, net: DaRnnNet, t_cfg: TrainConfig, n_epochs=10, save_plot
             f.flush()
             logger.info(f"Epoch {e_i:d}, train loss: {epoch_losses[e_i]:3.5f}, val loss: {np.mean(np.abs(all_val_loss))}."
                         f"test loss: {np.mean(np.abs(all_test_loss))}.")
+        if e_i % 20 == 0 and e_i != 0:
+            torch.save(net.encoder.state_dict(), os.path.join("data", "encoder"+str(e_i)+".torch"))
+            torch.save(net.decoder.state_dict(), os.path.join("data", "decoder"+str(e_i)+".torch"))
+
     f.close()
     return iter_losses, epoch_losses
 
@@ -217,7 +220,7 @@ def main():
 
     da_rnn_kwargs = {"batch_size": 64, "T": 10}
     config, model = da_rnn(learning_rate=.001, **da_rnn_kwargs)
-    iter_loss, epoch_loss = train(inputs_list, model, config, n_epochs=15, save_plots=save_plots)
+    iter_loss, epoch_loss = train(inputs_list, model, config, n_epochs=100, save_plots=save_plots)
     # final_y_pred = predict(model, data, config.train_size, config.batch_size, config.T)
 
     plt.figure()
