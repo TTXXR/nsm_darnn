@@ -6,7 +6,6 @@ import os
 from tqdm import tqdm
 
 import torch
-import torchvision
 from torch import nn
 from torch import optim
 from sklearn.preprocessing import StandardScaler
@@ -17,8 +16,6 @@ import pandas as pd
 import numpy as np
 import torch.utils.data as Data
 
-from MyDataset import *
-from SDataset import *
 import utils
 from modules import Encoder, Decoder
 from custom_types import DaRnnNet, TrainData, TrainConfig
@@ -32,22 +29,6 @@ total = 1753  #1753
 files_num = 50
 
 
-def preprocess_data(dat, cols) -> Tuple[TrainData, StandardScaler]:
-    scale = StandardScaler().fit(dat)
-    proc_dat = scale.transform(dat)
-
-    mask = np.ones(proc_dat.shape[1], dtype=bool)
-    for col in cols:
-        mask[col] = False
-
-    feats = proc_dat[:, mask]
-    targs = proc_dat[:, ~mask]
-
-    return TrainData(feats, targs), scale
-
-
-# def da_rnn(train_data: TrainData, n_targs: int, encoder_hidden_size=64, decoder_hidden_size=64,
-#            T=10, learning_rate=0.01, batch_size=128):
 def da_rnn(encoder_hidden_size=64, decoder_hidden_size=64, T=10, learning_rate=0.01, batch_size=128):
     train_cfg = TrainConfig(T, int(files_num * 100 * 0.7), batch_size, nn.MSELoss())
     # train_cfg = TrainConfig(T, int(1000 * 0.7), batch_size, nn.MSELoss())
@@ -78,9 +59,7 @@ def da_rnn(encoder_hidden_size=64, decoder_hidden_size=64, T=10, learning_rate=0
     return train_cfg, da_rnn_net
 
 
-# def train(net: DaRnnNet, train_data: TrainData, t_cfg: TrainConfig, n_epochs=10, save_plots=False):
 def train(inputs_list, net: DaRnnNet, t_cfg: TrainConfig, n_epochs=10, save_plots=False):
-    # iter_per_epoch = int(np.ceil(t_cfg.train_size * 1. / t_cfg.batch_size))
     f = open(root_path+"test.txt", "w")
     iter_per_epoch = int(np.ceil(int(total / files_num) * t_cfg.train_size * 1. / t_cfg.batch_size))
     iter_losses = np.zeros(n_epochs * iter_per_epoch)
@@ -94,8 +73,6 @@ def train(inputs_list, net: DaRnnNet, t_cfg: TrainConfig, n_epochs=10, save_plot
 
         train_input_data = pd.DataFrame()
         train_label_data = pd.DataFrame()
-        # t_input_data = []
-        # t_label_data = []
         all_val_loss = list()
         all_test_loss = list()
         n_iter_per_epoche = 0
@@ -106,7 +83,6 @@ def train(inputs_list, net: DaRnnNet, t_cfg: TrainConfig, n_epochs=10, save_plot
                 single_label_data = pd.read_csv(root_path + "Label/" + file, sep=' ', header=None, dtype=float)
                 train_input_data = train_input_data.append(single_input_data, ignore_index=True)
                 train_label_data = train_label_data.append(single_label_data, ignore_index=True)
-                # train_data = pd.concat([input_data, label_data], axis=1)
             elif i != 0 and i % files_num == 0:
 
                 scale = scale.fit(train_input_data)
@@ -122,7 +98,6 @@ def train(inputs_list, net: DaRnnNet, t_cfg: TrainConfig, n_epochs=10, save_plot
                                                                  t_label_data[:t_cfg.train_size])
 
                     loss = train_iteration(net, t_cfg.loss_func, feats, y_history, y_target)
-                    # iter_losses[e_i * iter_per_epoch + t_i // t_cfg.batch_size] = loss
                     iter_losses[e_i * iter_per_epoch + n_iter_per_epoche] = loss
                     # print('itr_loss:', loss)
 
@@ -145,54 +120,6 @@ def train(inputs_list, net: DaRnnNet, t_cfg: TrainConfig, n_epochs=10, save_plot
                 train_input_data = train_input_data.drop(train_input_data.index, inplace=False)
                 train_label_data = train_label_data.drop(train_label_data.index, inplace=False)
 
-        """MyDataset
-        train_data.initial()
-        train_iter = Data.DataLoader(dataset=train_data, batch_size=t_cfg.batch_size)
-        for t_i,data in enumerate(train_iter):
-            print(data[0])
-            new_data=pd.DataFrame()
-            for i in data:
-                new_data.append(pd.read_csv(StringIO(i), sep=","))
-        data, scaler = preprocess_data(new_data, targ_cols)
-        batch_idx = np.random.permutation(t_cfg.batch_size - t_cfg.T)
-        feats, y_history, y_target = prep_train_data(batch_idx, t_cfg, data)
-        """
-        """ original
-        perm_idx = np.random.permutation(t_cfg.train_size - t_cfg.T)
-        for t_i in range(0, t_cfg.train_size, t_cfg.batch_size):
-            batch_idx = perm_idx[t_i:(t_i + t_cfg.batch_size)]
-            feats, y_history, y_target = prep_train_data(batch_idx, t_cfg, train_data)
-
-            loss = train_iteration(net, t_cfg.loss_func, feats, y_history, y_target)
-            iter_losses[e_i * iter_per_epoch + t_i // t_cfg.batch_size] = loss
-
-            n_iter += 1
-
-            adjust_learning_rate(net, n_iter)
-        """
-        """loss
-        if e_i % 3 == 0:
-            y_test_pred = predict(net, train_data,
-                                  t_cfg.train_size, t_cfg.batch_size, t_cfg.T,
-                                  on_train=False)
-            # TODO: make this MSE and make it work for multiple inputs
-            val_loss = y_test_pred - train_data.targs[t_cfg.train_size:]
-            logger.info(f"Epoch {e_i:d}, train loss: {epoch_losses[e_i]:3.3f}, val loss: {np.mean(np.abs(val_loss))}.")
-            y_train_pred = predict(net, train_data,
-                                   t_cfg.train_size, t_cfg.batch_size, t_cfg.T,
-                                   on_train=True)
-
-        if e_i % 10 == 0:
-            plt.figure()
-            plt.plot(range(1, 1 + len(train_data.targs)), train_data.targs,
-                     label="True")
-            plt.plot(range(t_cfg.T, len(y_train_pred) + t_cfg.T), y_train_pred,
-                     label='Predicted - Train')
-            plt.plot(range(t_cfg.T + len(y_train_pred), len(train_data.targs) + 1), y_test_pred,
-                     label='Predicted - Test')
-            plt.legend(loc='upper left')
-            utils.save_or_show_plot(f"pred_{e_i}.png", save_plots)
-        """
         epoch_losses[e_i] = np.mean(iter_losses[range(e_i * iter_per_epoch, (e_i + 1) * iter_per_epoch)])
 
         if e_i % 1 == 0:
@@ -202,20 +129,6 @@ def train(inputs_list, net: DaRnnNet, t_cfg: TrainConfig, n_epochs=10, save_plot
                         f"test loss: {np.mean(np.abs(all_test_loss))}.")
     f.close()
     return iter_losses, epoch_losses
-
-"""
-def prep_train_data(batch_idx: np.ndarray, t_cfg: TrainConfig, train_data: TrainData):
-    feats = np.zeros((len(batch_idx), t_cfg.T - 1, train_data.feats.shape[1]))
-    y_history = np.zeros((len(batch_idx), t_cfg.T - 1, train_data.targs.shape[1]))
-    y_target = train_data.targs[batch_idx + t_cfg.T]
-
-    for b_i, b_idx in enumerate(batch_idx):
-        b_slc = slice(b_idx, b_idx + t_cfg.T - 1)
-        feats[b_i, :, :] = train_data.feats[b_slc, :]
-        y_history[b_i, :] = train_data.targs[b_slc]
-
-    return feats, y_history, y_target
-"""
 
 
 def prep_train_data(batch_idx: np.ndarray, t_cfg: TrainConfig, input_data, label_data):
@@ -266,38 +179,6 @@ def train_iteration(t_net: DaRnnNet, loss_func: typing.Callable, X, y_history, y
     return loss.item()
 
 
-"""
-def predict(t_net: DaRnnNet, t_dat: TrainData, train_size: int, batch_size: int, T: int, on_train=False):
-    out_size = t_dat.targs.shape[1]
-    if on_train:
-        y_pred = np.zeros((train_size - T + 1, out_size))
-    else:
-        y_pred = np.zeros((t_dat.feats.shape[0] - train_size, out_size))
-
-    for y_i in range(0, len(y_pred), batch_size):
-        y_slc = slice(y_i, y_i + batch_size)
-        batch_idx = range(len(y_pred))[y_slc]
-        b_len = len(batch_idx)
-        X = np.zeros((b_len, T - 1, t_dat.feats.shape[1]))
-        y_history = np.zeros((b_len, T - 1, t_dat.targs.shape[1]))
-
-        for b_i, b_idx in enumerate(batch_idx):
-            if on_train:
-                idx = range(b_idx, b_idx + T - 1)
-            else:
-                idx = range(b_idx + train_size - T, b_idx + train_size - 1)
-
-            X[b_i, :, :] = t_dat.feats[idx, :]
-            y_history[b_i, :] = t_dat.targs[idx]
-
-        y_history = numpy_to_tvar(y_history)
-        _, input_encoded = t_net.encoder(numpy_to_tvar(X))
-        y_pred[y_slc] = t_net.decoder(input_encoded, y_history).cpu().data.numpy()
-
-    return y_pred
-"""
-
-
 def predict(t_net: DaRnnNet, input_data, label_data, train_size: int, batch_size: int, T: int, on_train=False):
     out_size = label_data.shape[1]
     if on_train:
@@ -330,44 +211,6 @@ def predict(t_net: DaRnnNet, input_data, label_data, train_size: int, batch_size
 
 def main():
     save_plots = True
-
-    """ MyDataset
-    input_path = "/home/rr/Downloads/nsm_data/train.txt"
-    label_path = "/home/rr/Downloads/nsm_data/label.txt"
-    nraws = 1000
-    train_dataset = MyDataset(input_path, label_path, nraws, shuffle=False)
-
-    targ_cols = ()
-    for i in range(618):
-        targ_cols = targ_cols + (5307+i,)
-    # logger.info(f"Shape of data: {raw_data.shape}.\n"
-    #             f"Missing in data: {raw_data.isnull().sum().sum()}.")
-    # data, scaler = preprocess_data(raw_data, targ_cols)
-
-    da_rnn_kwargs = {"batch_size": 64, "T": 10}
-    config, model = da_rnn(train_dataset, n_targs=len(targ_cols), learning_rate=.001, **da_rnn_kwargs)
-    iter_loss, epoch_loss = train(model, train_dataset, config, n_epochs=30, save_plots=save_plots)
-    final_y_pred = predict(model, train_dataset, config.train_size, config.batch_size, config.T)
-    """
-
-    """ 单个
-    root_path = "/home/rr/Downloads/nsm_data/"
-    input_data = pd.read_csv(root_path + "400input.txt", header=None, dtype=float)
-    label_data = pd.read_csv(root_path + "400label.txt", header=None, dtype=float)
-    raw_data = pd.concat([input_data, label_data], axis=1)
-
-    targ_cols = ()
-    for i in range(len(label_data.columns)):
-        targ_cols = targ_cols + (len(input_data.columns)+i,)
-    logger.info(f"Shape of data: {raw_data.shape}.\n"
-                f"Missing in data: {raw_data.isnull().sum().sum()}.")
-
-    data, scaler = preprocess_data(raw_data, targ_cols)
-    da_rnn_kwargs = {"batch_size": 64, "T": 10}
-    config, model = da_rnn(data, n_targs=len(targ_cols), learning_rate=.001, **da_rnn_kwargs)
-    iter_loss, epoch_loss = train(model, data, config, n_epochs=15, save_plots=save_plots)
-    final_y_pred = predict(model, data, config.train_size, config.batch_size, config.T)
-    """
 
     inputs_list = os.listdir(root_path + "Input/")
     inputs_list.sort(key=lambda x: int(x[:-4]))
