@@ -5,12 +5,12 @@ from torch.nn import functional as tf
 from constants import device
 
 
-def init_hidden(x, hidden_size: int):
+def init_hidden(x, hidden_size: int, num_layers: int):
     """
     Train the initial value of the hidden state:
     https://r2rt.com/non-zero-initial-states-for-recurrent-neural-networks.html
     """
-    return Variable(torch.zeros(1, x.size(0), hidden_size).to(device))
+    return Variable(torch.zeros(num_layers, x.size(0), hidden_size).to(device))
 
 
 class Encoder(nn.Module):
@@ -25,23 +25,23 @@ class Encoder(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.T = T
+        self.num_layers = 2
 
-        self.gru_layer = nn.GRU(input_size=input_size, hidden_size=hidden_size, num_layers=1)
-        self.attn_linear = nn.Linear(in_features= hidden_size + T - 1, out_features=1)
+        self.gru_layer = nn.GRU(input_size=input_size, hidden_size=hidden_size, num_layers=self.num_layers)
+        self.attn_linear = nn.Linear(in_features=hidden_size + T - 1, out_features=1)
 
     def forward(self, input_data):
         # input_data: (batch_size, T - 1, input_size)
         input_weighted = Variable(torch.zeros(input_data.size(0), self.T - 1, self.input_size))
         input_encoded = Variable(torch.zeros(input_data.size(0), self.T - 1, self.hidden_size))
         # hidden: initial states with dimension hidden_size
-        hidden = init_hidden(input_data, self.hidden_size)  # 1 * batch_size * hidden_size
-        # cell = init_hidden(input_data, self.hidden_size)
+        hidden = init_hidden(input_data, self.hidden_size, self.num_layers)  # num_layers * batch_size * hidden_size
 
         for t in range(self.T - 1):
             # Eqn. 8: concatenate the hidden states with each predictor
+            # print(hidden.shape,hidden[-1].shape,input_data.shape)
             x = torch.cat((hidden.repeat(self.input_size, 1, 1).permute(1, 0, 2),
-                           # cell.repeat(self.input_size, 1, 1).permute(1, 0, 2),
-                           input_data.permute(0, 2, 1)), dim=2)  # batch_size * input_size * (2*hidden_size + T - 1)
+                           input_data.permute(0, 2, 1)), dim=2)  # batch_size * input_size * (hidden_size + T - 1)
             # Eqn. 8: Get attention weights
             x = self.attn_linear(x.view(-1, self.hidden_size + self.T - 1))  # (batch_size * input_size) * 1
             # Eqn. 9: Softmax the attention weights
@@ -52,7 +52,7 @@ class Encoder(nn.Module):
             # see https://discuss.pytorch.org/t/dataparallel-issue-with-flatten-parameter/8282
             self.gru_layer.flatten_parameters()
             _, gru_states = self.gru_layer(weighted_input.unsqueeze(0), hidden)
-            hidden = gru_states
+            hidden = gru_states[-1]
             # Save output
             input_weighted[:, t, :] = weighted_input
             input_encoded[:, t, :] = hidden
@@ -66,6 +66,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         self.T = T
+        self.num_layers = 2
         self.encoder_hidden_size = encoder_hidden_size
         self.decoder_hidden_size = decoder_hidden_size
 
@@ -74,7 +75,7 @@ class Decoder(nn.Module):
                                         nn.Dropout(0.5),
                                         nn.Tanh(),
                                         nn.Linear(encoder_hidden_size, 1))
-        self.gru_layer = nn.GRU(input_size=out_feats, hidden_size=decoder_hidden_size)
+        self.gru_layer = nn.GRU(input_size=out_feats, hidden_size=decoder_hidden_size, num_layers=self.num_layers)
         self.fc = nn.Linear(encoder_hidden_size + out_feats, out_feats)
         self.fc_final = nn.Linear(decoder_hidden_size + encoder_hidden_size, out_feats)
 
@@ -84,14 +85,12 @@ class Decoder(nn.Module):
         # input_encoded: (batch_size, T - 1, encoder_hidden_size)
         # y_history: (batch_size, (T-1))
         # Initialize hidden and cell, (1, batch_size, decoder_hidden_size)
-        hidden = init_hidden(input_encoded, self.decoder_hidden_size)
-        # cell = init_hidden(input_encoded, self.decoder_hidden_size)
+        hidden = init_hidden(input_encoded, self.decoder_hidden_size, self.num_layers)
         context = Variable(torch.zeros(input_encoded.size(0), self.encoder_hidden_size))
 
         for t in range(self.T - 1):
             # (batch_size, T, (2 * decoder_hidden_size + encoder_hidden_size))
             x = torch.cat((hidden.repeat(self.T - 1, 1, 1).permute(1, 0, 2),
-                           # cell.repeat(self.T - 1, 1, 1).permute(1, 0, 2),
                            input_encoded), dim=2)
             # Eqn. 12 & 13: softmax on the computed attention weights
             x = tf.softmax(
@@ -108,7 +107,7 @@ class Decoder(nn.Module):
             # Eqn. 16: GRU
             self.gru_layer.flatten_parameters()
             _, gru_output = self.gru_layer(y_tilde.unsqueeze(0), hidden)
-            hidden = gru_output  # 1 * batch_size * decoder_hidden_size
+            hidden = gru_output[-1]  # num_layers * batch_size * decoder_hidden_size
 
         # Eqn. 22: final output
         return self.fc_final(torch.cat((hidden[0], context), dim=1))
