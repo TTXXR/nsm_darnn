@@ -27,7 +27,6 @@ class Encoder(nn.Module):
         self.T = T
 
         self.gru_layer = nn.GRU(input_size=input_size, hidden_size=hidden_size, num_layers=1)
-
         self.attn_linear = nn.Linear(in_features= hidden_size + T - 1, out_features=1)
 
     def forward(self, input_data):
@@ -76,7 +75,6 @@ class Decoder(nn.Module):
                                         nn.Tanh(),
                                         nn.Linear(encoder_hidden_size, 1))
         self.gru_layer = nn.GRU(input_size=out_feats, hidden_size=decoder_hidden_size)
-
         self.fc = nn.Linear(encoder_hidden_size + out_feats, out_feats)
         self.fc_final = nn.Linear(decoder_hidden_size + encoder_hidden_size, out_feats)
 
