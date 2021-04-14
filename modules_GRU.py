@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from torch import nn
 from torch.autograd import Variable
 from torch.nn import functional as tf
@@ -39,8 +40,7 @@ class Encoder(nn.Module):
 
         for t in range(self.T - 1):
             # Eqn. 8: concatenate the hidden states with each predictor
-            # print(hidden.shape,hidden[-1].shape,input_data.shape)
-            x = torch.cat((hidden.repeat(self.input_size, 1, 1).permute(1, 0, 2),
+            x = torch.cat((hidden[-1,:,:].repeat(self.input_size, 1, 1).permute(1, 0, 2),
                            input_data.permute(0, 2, 1)), dim=2)  # batch_size * input_size * (hidden_size + T - 1)
             # Eqn. 8: Get attention weights
             x = self.attn_linear(x.view(-1, self.hidden_size + self.T - 1))  # (batch_size * input_size) * 1
@@ -52,10 +52,10 @@ class Encoder(nn.Module):
             # see https://discuss.pytorch.org/t/dataparallel-issue-with-flatten-parameter/8282
             self.gru_layer.flatten_parameters()
             _, gru_states = self.gru_layer(weighted_input.unsqueeze(0), hidden)
-            hidden = gru_states[-1]
+            hidden_states = gru_states[-1]
             # Save output
             input_weighted[:, t, :] = weighted_input
-            input_encoded[:, t, :] = hidden
+            input_encoded[:, t, :] = hidden_states
 
         return input_weighted, input_encoded.to(device)
 
@@ -90,7 +90,7 @@ class Decoder(nn.Module):
 
         for t in range(self.T - 1):
             # (batch_size, T, (2 * decoder_hidden_size + encoder_hidden_size))
-            x = torch.cat((hidden.repeat(self.T - 1, 1, 1).permute(1, 0, 2),
+            x = torch.cat((hidden[-1,:,:].repeat(self.T - 1, 1, 1).permute(1, 0, 2),
                            input_encoded), dim=2)
             # Eqn. 12 & 13: softmax on the computed attention weights
             x = tf.softmax(
@@ -107,7 +107,7 @@ class Decoder(nn.Module):
             # Eqn. 16: GRU
             self.gru_layer.flatten_parameters()
             _, gru_output = self.gru_layer(y_tilde.unsqueeze(0), hidden)
-            hidden = gru_output[-1]  # num_layers * batch_size * decoder_hidden_size
+            hidden_states = gru_output[-1]  # num_layers * batch_size * decoder_hidden_size
 
         # Eqn. 22: final output
-        return self.fc_final(torch.cat((hidden[0], context), dim=1))
+        return self.fc_final(torch.cat((hidden_states, context), dim=1))
