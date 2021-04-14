@@ -17,7 +17,8 @@ import numpy as np
 import torch.utils.data as Data
 
 import utils
-from modules import Encoder, Decoder
+# from modules import Encoder, Decoder
+from modules_GRU import Encoder, Decoder
 from custom_types import DaRnnNet, TrainData, TrainConfig
 from utils import numpy_to_tvar
 from constants import device
@@ -41,7 +42,7 @@ def da_rnn(encoder_hidden_size=64, decoder_hidden_size=64, T=10, learning_rate=0
 
     dec_kwargs = {"encoder_hidden_size": encoder_hidden_size,
                   "decoder_hidden_size": decoder_hidden_size, "T": T, "out_feats": 618}
-    decoder = Decoder(**dec_kwargs).to(device)
+    decoder =  Decoder(**dec_kwargs).to(device)
     with open(os.path.join("data", "dec_kwargs.json"), "w") as fi:
         json.dump(dec_kwargs, fi, indent=4)
 
@@ -218,7 +219,7 @@ def main():
     inputs_list = os.listdir(root_path + "Input/")
     inputs_list.sort(key=lambda x: int(x[:-4]))
 
-    da_rnn_kwargs = {"batch_size": 64, "T": 10}
+    da_rnn_kwargs = {"batch_size": 128, "T": 15}
     config, model = da_rnn(learning_rate=.001, **da_rnn_kwargs)
     iter_loss, epoch_loss = train(inputs_list, model, config, n_epochs=100, save_plots=save_plots)
     # final_y_pred = predict(model, data, config.train_size, config.batch_size, config.T)
