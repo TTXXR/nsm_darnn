@@ -1,6 +1,6 @@
 {
-    "encoder_hidden_size": 64,
-    "decoder_hidden_size": 64,
+    "encoder_hidden_size": 128,
+    "decoder_hidden_size": 128,
     "T": 15,
     "out_feats": 618
 }

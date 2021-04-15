@@ -30,7 +30,7 @@ total = 1753  # 1753
 files_num = 50
 
 
-def da_rnn(encoder_hidden_size=64, decoder_hidden_size=64, T=10, learning_rate=0.01, batch_size=128):
+def da_rnn(encoder_hidden_size=128, decoder_hidden_size=128, T=10, learning_rate=0.01, batch_size=128):
     train_cfg = TrainConfig(T, int(files_num * 100 * 0.7), batch_size, nn.MSELoss())
     logger.info(f"Training size: {int(total / files_num) * train_cfg.train_size:d}.")
 
@@ -223,7 +223,7 @@ def main():
     inputs_list = os.listdir(root_path + "Input/")
     inputs_list.sort(key=lambda x: int(x[:-4]))
 
-    da_rnn_kwargs = {"batch_size": 128, "T": 15}
+    da_rnn_kwargs = {"batch_size": 64, "T": 15}
     config, model = da_rnn(learning_rate=.001, **da_rnn_kwargs)
     iter_loss, epoch_loss = train(inputs_list, model, config, n_epochs=100, save_plots=save_plots)
     # final_y_pred = predict(model, data, config.train_size, config.batch_size, config.T)

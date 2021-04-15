@@ -26,7 +26,7 @@ class Encoder(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.T = T
-        self.num_layers = 4
+        self.num_layers = 1
 
         self.gru_layer = nn.GRU(input_size=input_size, hidden_size=hidden_size, num_layers=self.num_layers)
         self.attn_linear = nn.Linear(in_features=hidden_size + T - 1, out_features=1)
@@ -66,7 +66,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         self.T = T
-        self.num_layers = 4
+        self.num_layers = 1
         self.encoder_hidden_size = encoder_hidden_size
         self.decoder_hidden_size = decoder_hidden_size
 
