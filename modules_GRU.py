@@ -26,7 +26,7 @@ class Encoder(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.T = T
-        self.num_layers = 2
+        self.num_layers = 4
 
         self.gru_layer = nn.GRU(input_size=input_size, hidden_size=hidden_size, num_layers=self.num_layers)
         self.attn_linear = nn.Linear(in_features=hidden_size + T - 1, out_features=1)
@@ -40,7 +40,7 @@ class Encoder(nn.Module):
 
         for t in range(self.T - 1):
             # Eqn. 8: concatenate the hidden states with each predictor
-            x = torch.cat((hidden[-1,:,:].repeat(self.input_size, 1, 1).permute(1, 0, 2),
+            x = torch.cat((hidden[-1, :, :].repeat(self.input_size, 1, 1).permute(1, 0, 2),
                            input_data.permute(0, 2, 1)), dim=2)  # batch_size * input_size * (hidden_size + T - 1)
             # Eqn. 8: Get attention weights
             x = self.attn_linear(x.view(-1, self.hidden_size + self.T - 1))  # (batch_size * input_size) * 1
@@ -66,7 +66,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         self.T = T
-        self.num_layers = 2
+        self.num_layers = 4
         self.encoder_hidden_size = encoder_hidden_size
         self.decoder_hidden_size = decoder_hidden_size
 
@@ -90,7 +90,7 @@ class Decoder(nn.Module):
 
         for t in range(self.T - 1):
             # (batch_size, T, (2 * decoder_hidden_size + encoder_hidden_size))
-            x = torch.cat((hidden[-1,:,:].repeat(self.T - 1, 1, 1).permute(1, 0, 2),
+            x = torch.cat((hidden[-1, :, :].repeat(self.T - 1, 1, 1).permute(1, 0, 2),
                            input_encoded), dim=2)
             # Eqn. 12 & 13: softmax on the computed attention weights
             x = tf.softmax(
